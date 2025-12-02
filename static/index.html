@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TouchRelay</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="bg-slate-50 min-h-screen p-0 overflow-hidden">
+    <div class="max-w-2xl mx-auto bg-white min-h-screen flex flex-col border-x border-slate-200">
+        <!-- Header -->
+        <header class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+            <h1 class="text-lg font-semibold text-slate-900">TouchRelay</h1>
+            <div class="flex items-center gap-2">
+                <span id="status-indicator" class="w-2 h-2 rounded-full status-dot disconnected"></span>
+                <span id="status-text" class="text-sm text-slate-600">Connecting</span>
+            </div>
+        </header>
+
+        <!-- Main area -->
+        <section class="flex-1 p-4 flex flex-col gap-3">
+            <!-- Sensitivity control -->
+            <div class="flex items-center gap-3 px-2">
+                <label class="text-xs text-slate-500 shrink-0">Sensitivity</label>
+                <input
+                    type="range"
+                    id="move-factor"
+                    min="0.5"
+                    max="3.0"
+                    step="0.1"
+                    value="1.8"
+                    class="flex-1 h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-slate-900"
+                >
+                <span id="move-factor-value" class="text-xs font-medium text-slate-700 w-10 text-right">1.8x</span>
+            </div>
+
+            <!-- Text input -->
+            <div class="flex gap-2">
+                <input
+                    type="text"
+                    id="textInput"
+                    placeholder="Type text..."
+                    class="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent bg-white"
+                >
+                <button
+                    id="btn-send-text"
+                    class="px-4 py-2 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 active:scale-95 transition-all"
+                >
+                    Send
+                </button>
+            </div>
+
+            <!-- Touchpad -->
+            <div id="touchpad" class="flex-1 rounded-xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center relative cursor-pointer transition-colors touch-area">
+                <div class="text-slate-400 text-xs pointer-events-none select-none">
+                    Tap · Double Tap | Two Fingers: Right Click · Scroll
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
