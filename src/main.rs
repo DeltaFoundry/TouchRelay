@@ -16,16 +16,20 @@ use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 use tray_icon::{
     menu::{Menu, MenuItem, MenuEvent},
-    TrayIconBuilder, Icon,
+    TrayIconBuilder, TrayIcon, Icon,
 };
 use winit::event_loop::{EventLoop, ControlFlow, ActiveEventLoop};
 use winit::application::ApplicationHandler;
 use local_ip_address::local_ip;
 use tray_icon::menu::MenuId;
+use winreg::enums::*;
+use winreg::RegKey;
 
 // Application handler for winit event loop
 struct TrayApp {
+    tray_icon: TrayIcon,
     about_id: MenuId,
+    startup_id: MenuId,
     quit_id: MenuId,
 }
 
@@ -49,12 +53,60 @@ impl ApplicationHandler for TrayApp {
             if event.id == self.about_id {
                 info!("About menu item clicked, opening GitHub page...");
                 let _ = open::that("https://github.com/DeltaFoundry/TouchRelay");
+            } else if event.id == self.startup_id {
+                info!("Startup menu item clicked, toggling startup...");
+                toggle_startup();
+                // Update menu to reflect new state
+                self.update_menu();
             } else if event.id == self.quit_id {
                 info!("Quit menu item clicked, shutting down...");
                 event_loop.exit();
             }
         }
     }
+}
+
+impl TrayApp {
+    /// Update the tray menu to reflect current startup state
+    fn update_menu(&mut self) {
+        let (tray_menu, startup_id, about_id, quit_id) = create_tray_menu();
+
+        // Update menu IDs
+        self.startup_id = startup_id;
+        self.about_id = about_id;
+        self.quit_id = quit_id;
+
+        // Set the new menu
+        self.tray_icon.set_menu(Some(Box::new(tray_menu)));
+        info!("Menu updated with current startup state");
+    }
+}
+
+/// Create tray menu with current startup state
+fn create_tray_menu() -> (Menu, MenuId, MenuId, MenuId) {
+    let tray_menu = Menu::new();
+
+    // Check startup status and create menu item with checkmark if enabled
+    let is_startup_enabled = is_startup_enabled();
+    let startup_text = if is_startup_enabled {
+        "✓ Start with Windows"
+    } else {
+        "Start with Windows"
+    };
+    let startup_item = MenuItem::new(startup_text, true, None);
+
+    let about_item = MenuItem::new("About", true, None);
+    let quit_item = MenuItem::new("Quit", true, None);
+
+    let startup_id = startup_item.id().clone();
+    let about_id = about_item.id().clone();
+    let quit_id = quit_item.id().clone();
+
+    tray_menu.append(&startup_item).unwrap();
+    tray_menu.append(&about_item).unwrap();
+    tray_menu.append(&quit_item).unwrap();
+
+    (tray_menu, startup_id, about_id, quit_id)
 }
 
 fn main() {
@@ -79,25 +131,19 @@ fn main() {
         Ok(ip) => {
             let url = format!("http://{}:8000/", ip);
             info!("Local access URL: {}", url);
-            format!("TouchRelay - Remote Mouse & Keyboard\nConnect: {}", url)
+            format!("TouchRelay\n{}", url)
         }
         Err(_) => {
             warn!("Failed to detect local IP address");
-            "TouchRelay - Remote Mouse & Keyboard\nConnect: http://<PC_IP>:8000/".to_string()
+            "TouchRelay\nhttp://<PC_IP>:8000/".to_string()
         }
     };
 
     // Create tray menu
-    let tray_menu = Menu::new();
-    let about_item = MenuItem::new("About", true, None);
-    let quit_item = MenuItem::new("Quit", true, None);
-    let about_id = about_item.id().clone();
-    let quit_id = quit_item.id().clone();
-    tray_menu.append(&about_item).unwrap();
-    tray_menu.append(&quit_item).unwrap();
+    let (tray_menu, startup_id, about_id, quit_id) = create_tray_menu();
 
     // Build tray icon
-    let _tray_icon = TrayIconBuilder::new()
+    let tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
         .with_tooltip(&tooltip)
         .with_icon(icon)
@@ -116,7 +162,9 @@ fn main() {
 
     // Create application handler
     let mut app = TrayApp {
+        tray_icon,
         about_id,
+        startup_id,
         quit_id,
     };
 
@@ -355,5 +403,71 @@ async fn handle_message(text: &str, enigo: Arc<Mutex<Enigo>>) -> Result<(), Stri
         Ok(())
     } else {
         Err("Message is not an array".to_string())
+    }
+}
+
+// Startup registry management functions
+const APP_NAME: &str = "TouchRelay";
+
+/// Check if the application is set to start with Windows
+fn is_startup_enabled() -> bool {
+    match get_startup_registry_key(false) {
+        Ok(key) => {
+            match key.get_value::<String, _>(APP_NAME) {
+                Ok(_) => true,
+                Err(_) => false,
+            }
+        }
+        Err(_) => false,
+    }
+}
+
+/// Enable startup with Windows
+fn enable_startup() -> Result<(), Box<dyn std::error::Error>> {
+    let exe_path = std::env::current_exe()?;
+    let exe_path_str = exe_path.to_string_lossy().to_string();
+
+    let key = get_startup_registry_key(true)?;
+    key.set_value(APP_NAME, &exe_path_str)?;
+
+    info!("Startup enabled: {}", exe_path_str);
+    Ok(())
+}
+
+/// Disable startup with Windows
+fn disable_startup() -> Result<(), Box<dyn std::error::Error>> {
+    let key = get_startup_registry_key(true)?;
+    key.delete_value(APP_NAME)?;
+
+    info!("Startup disabled");
+    Ok(())
+}
+
+/// Toggle startup with Windows
+fn toggle_startup() {
+    if is_startup_enabled() {
+        match disable_startup() {
+            Ok(_) => info!("Successfully disabled startup"),
+            Err(e) => error!("Failed to disable startup: {}", e),
+        }
+    } else {
+        match enable_startup() {
+            Ok(_) => info!("Successfully enabled startup"),
+            Err(e) => error!("Failed to enable startup: {}", e),
+        }
+    }
+}
+
+/// Get the Windows registry key for startup programs
+fn get_startup_registry_key(writable: bool) -> Result<RegKey, std::io::Error> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    if writable {
+        hkcu.open_subkey_with_flags(
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            KEY_WRITE,
+        )
+    } else {
+        hkcu.open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Run")
     }
 }
