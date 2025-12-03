@@ -28,8 +28,9 @@ use winreg::RegKey;
 // Application handler for winit event loop
 struct TrayApp {
     tray_icon: TrayIcon,
-    about_id: MenuId,
+    open_web_id: MenuId,
     startup_id: MenuId,
+    about_id: MenuId,
     quit_id: MenuId,
 }
 
@@ -50,14 +51,17 @@ impl ApplicationHandler for TrayApp {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         // Check for menu events
         if let Ok(event) = MenuEvent::receiver().try_recv() {
-            if event.id == self.about_id {
-                info!("About menu item clicked, opening GitHub page...");
-                let _ = open::that("https://github.com/DeltaFoundry/TouchRelay");
+            if event.id == self.open_web_id {
+                info!("Open Web menu item clicked, opening web interface...");
+                open_web_interface();
             } else if event.id == self.startup_id {
                 info!("Startup menu item clicked, toggling startup...");
                 toggle_startup();
                 // Update menu to reflect new state
                 self.update_menu();
+            } else if event.id == self.about_id {
+                info!("About menu item clicked, opening GitHub page...");
+                let _ = open::that("https://github.com/DeltaFoundry/TouchRelay");
             } else if event.id == self.quit_id {
                 info!("Quit menu item clicked, shutting down...");
                 event_loop.exit();
@@ -69,9 +73,10 @@ impl ApplicationHandler for TrayApp {
 impl TrayApp {
     /// Update the tray menu to reflect current startup state
     fn update_menu(&mut self) {
-        let (tray_menu, startup_id, about_id, quit_id) = create_tray_menu();
+        let (tray_menu, open_web_id, startup_id, about_id, quit_id) = create_tray_menu();
 
         // Update menu IDs
+        self.open_web_id = open_web_id;
         self.startup_id = startup_id;
         self.about_id = about_id;
         self.quit_id = quit_id;
@@ -83,8 +88,11 @@ impl TrayApp {
 }
 
 /// Create tray menu with current startup state
-fn create_tray_menu() -> (Menu, MenuId, MenuId, MenuId) {
+fn create_tray_menu() -> (Menu, MenuId, MenuId, MenuId, MenuId) {
     let tray_menu = Menu::new();
+
+    // Open web interface menu item
+    let open_web_item = MenuItem::new("Open Web Interface", true, None);
 
     // Check startup status and create menu item with checkmark if enabled
     let is_startup_enabled = is_startup_enabled();
@@ -98,15 +106,17 @@ fn create_tray_menu() -> (Menu, MenuId, MenuId, MenuId) {
     let about_item = MenuItem::new("About", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
 
+    let open_web_id = open_web_item.id().clone();
     let startup_id = startup_item.id().clone();
     let about_id = about_item.id().clone();
     let quit_id = quit_item.id().clone();
 
+    tray_menu.append(&open_web_item).unwrap();
     tray_menu.append(&startup_item).unwrap();
     tray_menu.append(&about_item).unwrap();
     tray_menu.append(&quit_item).unwrap();
 
-    (tray_menu, startup_id, about_id, quit_id)
+    (tray_menu, open_web_id, startup_id, about_id, quit_id)
 }
 
 fn main() {
@@ -140,7 +150,7 @@ fn main() {
     };
 
     // Create tray menu
-    let (tray_menu, startup_id, about_id, quit_id) = create_tray_menu();
+    let (tray_menu, open_web_id, startup_id, about_id, quit_id) = create_tray_menu();
 
     // Build tray icon
     let tray_icon = TrayIconBuilder::new()
@@ -163,8 +173,9 @@ fn main() {
     // Create application handler
     let mut app = TrayApp {
         tray_icon,
-        about_id,
+        open_web_id,
         startup_id,
+        about_id,
         quit_id,
     };
 
@@ -403,6 +414,28 @@ async fn handle_message(text: &str, enigo: Arc<Mutex<Enigo>>) -> Result<(), Stri
         Ok(())
     } else {
         Err("Message is not an array".to_string())
+    }
+}
+
+/// Open the web interface in the default browser
+fn open_web_interface() {
+    match local_ip() {
+        Ok(ip) => {
+            let url = format!("http://{}:8000/", ip);
+            info!("Opening web interface: {}", url);
+            if let Err(e) = open::that(&url) {
+                error!("Failed to open web interface: {}", e);
+            }
+        }
+        Err(e) => {
+            error!("Failed to get local IP address: {}", e);
+            // Fallback to localhost
+            let url = "http://127.0.0.1:8000/";
+            info!("Opening web interface (localhost): {}", url);
+            if let Err(e) = open::that(url) {
+                error!("Failed to open web interface: {}", e);
+            }
+        }
     }
 }
 
