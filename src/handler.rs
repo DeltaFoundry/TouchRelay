@@ -1,5 +1,5 @@
 use axum::extract::ws::{Message, WebSocket};
-use enigo::{Enigo, Mouse, Button, Keyboard, Direction, Settings};
+use enigo::{Enigo, Mouse, Button, Keyboard, Direction, Settings, Key};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -112,6 +112,28 @@ async fn handle_message(text: &str, enigo: Arc<Mutex<Enigo>>) -> Result<(), Stri
                 let mut enigo = enigo.lock().await;
                 enigo.text(text_content)
                     .map_err(|e| format!("Text input failed: {}", e))?;
+            }
+
+            "k" => {
+                // Key press: ["k", "KeyName"]
+                if arr.len() < 2 {
+                    return Err("Invalid key press message".to_string());
+                }
+                let key_name = arr[1].as_str().ok_or("Invalid key name")?;
+
+                let key = match key_name {
+                    "Escape" => Key::Escape,
+                    "PageUp" => Key::PageUp,
+                    "PageDown" => Key::PageDown,
+                    "Delete" => Key::Backspace,  // Del button sends Backspace key
+                    "Return" => Key::Return,
+                    _ => return Err(format!("Unknown key: {}", key_name)),
+                };
+
+                let mut enigo = enigo.lock().await;
+                enigo.key(key, Direction::Click)
+                    .map_err(|e| format!("Key press failed: {}", e))?;
+                info!("Key pressed: {} (mapped to {:?})", key_name, key);
             }
 
             "ping" => {

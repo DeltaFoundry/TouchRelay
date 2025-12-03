@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initWebSocket();
     initTouchpad();
     initTextInput();
+    initFunctionKeys();
     initSensitivityControls();
 });
 
@@ -282,6 +283,36 @@ function initTextInput() {
     btnSendText.addEventListener('touchstart', (e) => {
         e.preventDefault();
         btnSendText.click();
+    });
+}
+
+// Initialize function keys
+function initFunctionKeys() {
+    const keyButtons = document.querySelectorAll('[data-key]');
+
+    keyButtons.forEach(button => {
+        const sendKey = () => {
+            const keyName = button.getAttribute('data-key');
+            if (sendMessage(['k', keyName])) {
+                // Visual feedback
+                button.classList.add('scale-95');
+                setTimeout(() => {
+                    button.classList.remove('scale-95');
+                }, 150);
+                console.log('Function key pressed:', keyName);
+            } else {
+                console.warn('Not connected, cannot send key:', keyName);
+            }
+        };
+
+        // Handle click events
+        button.addEventListener('click', sendKey);
+
+        // Handle touch events (prevent default to avoid double firing)
+        button.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            sendKey();
+        });
     });
 }
 
